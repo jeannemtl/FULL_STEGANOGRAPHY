@@ -1,185 +1,237 @@
+"""
+GPT-2 Encoder with Steganographic Reasoning Layer
+Encodes reasoning across multiple frequency channels using FDM
+"""
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from transformers import GPT2LMHeadModel
 import numpy as np
 
+
 class SteganographicReasoningLayer(nn.Module):
-    """Layer that encodes reasoning onto frequency channels"""
+    """
+    Layer that encodes reasoning bits into frequency-domain signals
+    """
     
     def __init__(
         self,
-        hidden_size: int = 768,
-        num_channels: int = 3,
-        frequencies: list = [1.0, 2.0, 3.0],
         signal_length: int = 5000,
-        sampling_rate: int = 100
+        sampling_rate: int = 100,
+        num_channels: int = 3,
+        frequencies: list = None
     ):
         super().__init__()
         
-        self.hidden_size = hidden_size
-        self.num_channels = num_channels
-        self.frequencies = frequencies
         self.signal_length = signal_length
         self.sampling_rate = sampling_rate
+        self.num_channels = num_channels
+        self.frequencies = frequencies or [1.0, 2.0, 3.0]
         
-        # Learnable projectors: hidden state → reasoning bits
-        self.reasoning_projector = nn.ModuleList([
-            nn.Linear(hidden_size, 64) for _ in range(num_channels)
-        ])
-        
-        # Modulation parameters
-        self.amplitude_high = nn.Parameter(torch.tensor(1.0))
-        self.amplitude_low = nn.Parameter(torch.tensor(0.1))
-        
-        # Time vector for carrier generation
-        self.register_buffer(
-            'time',
-            torch.linspace(0, signal_length/sampling_rate, signal_length)
-        )
+        # Learnable projection for reasoning bits
+        self.reasoning_projector = nn.Linear(768, num_channels * 64)
     
-    def encode_reasoning_to_signal(
-        self,
-        reasoning_bits: torch.Tensor,
-        frequency: float
-    ) -> torch.Tensor:
-        """Encode bits onto carrier using ASK modulation"""
+    def encode_reasoning_to_signal(self, bits: torch.Tensor, carrier_freq: float) -> torch.Tensor:
+        """
+        Encode reasoning bits into a signal at the specified carrier frequency
         
-        batch_size = reasoning_bits.shape[0]
-        samples_per_bit = self.signal_length // 64
+        Args:
+            bits: [batch_size, num_bits] binary tensor
+            carrier_freq: carrier frequency in Hz
+            
+        Returns:
+            signal: [batch_size, signal_length] modulated signal
+        """
+        batch_size = bits.shape[0]
+        num_bits = bits.shape[1]
         
-        # Carrier wave
-        carrier = torch.sin(2 * np.pi * frequency * self.time)
-        carrier = carrier.unsqueeze(0).expand(batch_size, -1)
+        # Calculate samples per bit (use integer division)
+        samples_per_bit = self.signal_length // num_bits
         
-        # Expand bits
-        bits_expanded = reasoning_bits.unsqueeze(2).repeat(1, 1, samples_per_bit)
-        bits_expanded = bits_expanded.reshape(batch_size, -1)
+        # Expand bits to signal
+        expanded_bits = bits.unsqueeze(-1).repeat(1, 1, samples_per_bit)
+        expanded_bits = expanded_bits.reshape(batch_size, -1)
+        
+        # PAD to exact signal_length
+        current_length = expanded_bits.shape[1]
+        if current_length < self.signal_length:
+            padding = self.signal_length - current_length
+            expanded_bits = torch.nn.functional.pad(expanded_bits, (0, padding), value=0)
+        elif current_length > self.signal_length:
+            expanded_bits = expanded_bits[:, :self.signal_length]
+        
+        # Generate time array
+        t = torch.linspace(0, self.signal_length / self.sampling_rate, 
+                           self.signal_length, device=bits.device)
+        t = t.unsqueeze(0).expand(batch_size, -1)
+        
+        # Generate carrier
+        carrier = torch.sin(2 * np.pi * carrier_freq * t)
         
         # ASK modulation
-        amplitude = torch.where(
-            bits_expanded > 0.5,
-            self.amplitude_high,
-            self.amplitude_low
-        )
-        
+        amplitude = expanded_bits * 0.5 + 0.5  # Scale to [0.5, 1.0]
         signal = amplitude * carrier
+        
         return signal
     
-    def forward(self, hidden_states: torch.Tensor, generate_signal: bool = False):
+    def forward(self, hidden_states: torch.Tensor, reasoning_bits: torch.Tensor = None):
         """
+        Forward pass: encode reasoning into frequency signals
+        
         Args:
-            hidden_states: [batch, seq_len, hidden_size]
-            generate_signal: Whether to generate FDM signals
-        
-        Returns:
-            reasoning_signals or reasoning_logits
-        """
-        last_hidden = hidden_states[:, -1, :]  # [batch, hidden_size]
-        
-        reasoning_logits = []
-        reasoning_signals = []
-        
-        for i, (projector, freq) in enumerate(zip(self.reasoning_projector, self.frequencies)):
-            logits = projector(last_hidden)  # [batch, 64]
-            reasoning_logits.append(logits)
+            hidden_states: [batch_size, seq_len, hidden_dim] from GPT-2
+            reasoning_bits: [batch_size, num_channels, num_bits] optional target bits
             
-            if generate_signal:
-                bits = torch.sigmoid(logits)
-                signal = self.encode_reasoning_to_signal(bits, freq)
-                reasoning_signals.append(signal)
+        Returns:
+            reasoning_signals: [batch_size, num_channels, signal_length]
+            reasoning_logits: [batch_size, num_channels, num_bits] for training
+        """
+        batch_size = hidden_states.shape[0]
         
-        reasoning_logits = torch.stack(reasoning_logits, dim=1)  # [batch, num_channels, 64]
+        # Use last hidden state as reasoning representation
+        reasoning_repr = hidden_states[:, -1, :]  # [batch_size, 768]
         
-        if generate_signal:
-            reasoning_signals = torch.stack(reasoning_signals, dim=1)  # [batch, num_channels, signal_length]
-            return reasoning_signals, reasoning_logits
+        # Project to bit logits
+        reasoning_logits = self.reasoning_projector(reasoning_repr)
+        reasoning_logits = reasoning_logits.view(batch_size, self.num_channels, 64)
         
-        return reasoning_logits
+        # Convert to bits (sigmoid for soft bits during training)
+        reasoning_bits_pred = torch.sigmoid(reasoning_logits)
+        
+        # Use provided bits if available, otherwise use predicted
+        if reasoning_bits is not None:
+            bits_to_encode = reasoning_bits
+        else:
+            bits_to_encode = reasoning_bits_pred
+        
+        # Encode each channel at its frequency
+        reasoning_signals = []
+        for i in range(self.num_channels):
+            signal = self.encode_reasoning_to_signal(
+                bits_to_encode[:, i, :],
+                self.frequencies[i]
+            )
+            reasoning_signals.append(signal)
+        
+        reasoning_signals = torch.stack(reasoning_signals, dim=1)
+        
+        return reasoning_signals, reasoning_logits
 
 
 class GPT2WithSteganographicReasoning(nn.Module):
-    """GPT-2 with built-in steganographic reasoning"""
+    """
+    GPT-2 model with steganographic reasoning encoding
+    """
     
     def __init__(
         self,
         base_model_name: str = 'gpt2',
         num_channels: int = 3,
-        frequencies: list = [1.0, 2.0, 3.0]
+        frequencies: list = None
     ):
         super().__init__()
         
+        # Load base GPT-2
         self.gpt2 = GPT2LMHeadModel.from_pretrained(base_model_name)
-        config = self.gpt2.config
         
+        # Add steganographic layer
         self.stego_layer = SteganographicReasoningLayer(
-            hidden_size=config.n_embd,
+            signal_length=5000,
+            sampling_rate=100,
             num_channels=num_channels,
-            frequencies=frequencies
+            frequencies=frequencies or [1.0, 2.0, 3.0]
         )
-        
-        self.modulation_weight = nn.Parameter(torch.tensor(0.1))
     
     def forward(
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor = None,
         labels: torch.Tensor = None,
-        generate_reasoning: bool = False
+        reasoning_bits: torch.Tensor = None,
+        generate_reasoning: bool = True
     ):
-        """Forward pass"""
+        """
+        Forward pass
         
-        gpt2_outputs = self.gpt2.transformer(
+        Args:
+            input_ids: [batch_size, seq_len]
+            attention_mask: [batch_size, seq_len]
+            labels: [batch_size, seq_len] for language modeling loss
+            reasoning_bits: [batch_size, num_channels, num_bits] target reasoning
+            generate_reasoning: whether to generate reasoning signals
+            
+        Returns:
+            dict with lm_loss, reasoning_signals, reasoning_logits, logits
+        """
+        
+        # Forward through GPT-2
+        outputs = self.gpt2(
             input_ids=input_ids,
-            attention_mask=attention_mask
+            attention_mask=attention_mask,
+            labels=labels,
+            output_hidden_states=True
         )
         
-        hidden_states = gpt2_outputs.last_hidden_state
-        lm_logits = self.gpt2.lm_head(hidden_states)
+        lm_loss = outputs.loss
+        logits = outputs.logits
+        hidden_states = outputs.hidden_states[-1]  # Last layer
+        
+        # Generate reasoning signals
+        reasoning_signals = None
+        reasoning_logits = None
         
         if generate_reasoning:
             reasoning_signals, reasoning_logits = self.stego_layer(
-                hidden_states, generate_signal=True
+                hidden_states,
+                reasoning_bits
             )
-        else:
-            reasoning_logits = self.stego_layer(hidden_states, generate_signal=False)
-            reasoning_signals = None
-        
-        modulated_logits = lm_logits + self.modulation_weight * reasoning_logits.sum(dim=1).unsqueeze(1)
-        
-        loss = None
-        if labels is not None:
-            shift_logits = modulated_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
         
         return {
-            'logits': modulated_logits,
+            'lm_loss': lm_loss,
+            'logits': logits,
             'reasoning_signals': reasoning_signals,
-            'reasoning_logits': reasoning_logits,
-            'loss': loss
+            'reasoning_logits': reasoning_logits
         }
     
     def generate_with_reasoning(
         self,
         input_ids: torch.Tensor,
         max_length: int = 100,
-        temperature: float = 1.0
+        temperature: float = 1.0,
+        **kwargs
     ):
-        """Generate text with embedded reasoning"""
+        """
+        Generate text with reasoning signals
         
-        device = input_ids.device
-        
-        for _ in range(max_length - input_ids.shape[1]):
-            outputs = self.forward(input_ids=input_ids, generate_reasoning=False)
+        Args:
+            input_ids: [batch_size, seq_len]
+            max_length: maximum generation length
+            temperature: sampling temperature
             
-            next_token_logits = outputs['logits'][:, -1, :] / temperature
-            probs = F.softmax(next_token_logits, dim=-1)
-            next_token = torch.multinomial(probs, num_samples=1)
+        Returns:
+            generated_ids: [batch_size, max_length]
+            reasoning_signals: [batch_size, num_channels, signal_length]
+        """
+        
+        # Generate text
+        generated_ids = self.gpt2.generate(
+            input_ids=input_ids,
+            max_length=max_length,
+            temperature=temperature,
+            do_sample=True,
+            pad_token_id=self.gpt2.config.eos_token_id,
+            **kwargs
+        )
+        
+        # Get final hidden states for reasoning
+        with torch.no_grad():
+            outputs = self.gpt2(
+                input_ids=generated_ids,
+                output_hidden_states=True
+            )
+            hidden_states = outputs.hidden_states[-1]
             
-            input_ids = torch.cat([input_ids, next_token], dim=1)
+            # Generate reasoning signals
+            reasoning_signals, _ = self.stego_layer(hidden_states, reasoning_bits=None)
         
-        final_outputs = self.forward(input_ids=input_ids, generate_reasoning=True)
-        
-        return input_ids, final_outputs['reasoning_signals']
+        return generated_ids, reasoning_signals

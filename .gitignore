@@ -1,0 +1,35 @@
+# Python cache
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+__pycache__/
+
+# Model checkpoints (too large for GitHub - ~500MB each)
+checkpoints_*/
+*.pt
+*.pth
+*.ckpt
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment
+venv/
+env/
+ENV/

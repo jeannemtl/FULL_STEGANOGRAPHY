@@ -88,7 +88,7 @@ class SteganographicTrainer:
             generate_reasoning=True
         )
         
-        lm_loss = encoder_outputs['loss']
+        lm_loss = encoder_outputs['lm_loss']
         reasoning_signals = encoder_outputs['reasoning_signals']
         
         combined_signals = reasoning_signals.sum(dim=1)
@@ -152,7 +152,7 @@ class SteganographicTrainer:
                 decoder_outputs = self.decoder(combined_signals)
                 decoded_bits = decoder_outputs['decoded_bits']
                 
-                lm_loss = encoder_outputs['loss']
+                lm_loss = encoder_outputs['lm_loss']
                 reasoning_loss = self.reasoning_criterion(decoded_bits, target_reasoning_bits)
                 ortho_loss = self.compute_orthogonality_loss(reasoning_signals)
                 
