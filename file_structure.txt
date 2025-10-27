@@ -1,0 +1,24 @@
+steganographic_ai/
+├── core/
+│   ├── __init__.py
+│   ├── fdm.py                          # FDM signal generation
+│   ├── encryption.py                   # OTP encryption
+│   └── demodulation.py                 # Signal demodulation
+├── models/
+│   ├── __init__.py
+│   ├── encoder.py                      # Steganographic encoder model
+│   └── decoder.py                      # Steganographic decoder model
+├── training/
+│   ├── __init__.py
+│   ├── dataset.py                      # Dataset class
+│   └── train.py                        # Training script
+├── experiments/
+│   ├── __init__.py
+│   └── demo.py                         # End-to-end demo
+├── utils/
+│   ├── __init__.py
+│   ├── visualization.py                # Plotting functions
+│   └── metrics.py                      # Accuracy, RMSE metrics
+├── checkpoints/                        # Saved models (created during training)
+├── results/                            # Outputs (created during experiments)
+└── requirements.txt                    # Dependencies

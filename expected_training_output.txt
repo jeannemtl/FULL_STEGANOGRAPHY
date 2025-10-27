@@ -1,0 +1,116 @@
+```
+
+---
+
+## **📊 Expected Training Output:**
+```
+================================================================================
+🚀 STEGANOGRAPHIC MODEL TRAINING
+================================================================================
+
+Device: cuda
+Batch size: 8
+Epochs: 5
+Learning rate: 5e-05
+
+Loading tokenizer...
+Creating datasets...
+Generating 1000 synthetic training samples...
+Generating 200 synthetic training samples...
+✓ Train samples: 1000
+✓ Val samples: 200
+
+Initializing models...
+✓ Encoder initialized
+✓ Decoder initialized
+
+================================================================================
+🎓 TRAINING STEGANOGRAPHIC MODEL
+================================================================================
+
+Configuration:
+  Epochs: 5
+  Train batches: 125
+  Device: cuda
+  LM weight: 1.0
+  Reasoning weight: 0.5
+  Orthogonality weight: 0.01
+
+================================================================================
+Epoch 1/5
+================================================================================
+
+Training: 100%|████████████████| 125/125 [02:15<00:00,  1.08s/it]
+  total_loss=4.2531, lm_loss=3.8245, reasoning_loss=0.7215
+
+  Step 10 - Total: 4.5231, LM: 4.1023, Reasoning: 0.7892, Ortho: 0.0152
+  Step 20 - Total: 4.3145, LM: 3.9234, Reasoning: 0.7456, Ortho: 0.0143
+  ...
+
+📊 Epoch 1 Summary:
+  Avg Total Loss: 4.2531
+  Avg LM Loss: 3.8245
+  Avg Reasoning Loss: 0.7215
+  Avg Ortho Loss: 0.0134
+
+🔍 Running validation...
+  Val Total Loss: 4.1234
+  Val LM Loss: 3.7123
+  Val Reasoning Loss: 0.6982
+
+  ✓ Saved best model to checkpoints/best_model.pt
+  ✓ Saved checkpoint to checkpoints/checkpoint_epoch_1.pt
+
+================================================================================
+Epoch 2/5
+================================================================================
+
+Training: 100%|████████████████| 125/125 [02:12<00:00,  1.06s/it]
+  total_loss=3.8215, lm_loss=3.4123, reasoning_loss=0.6134
+
+📊 Epoch 2 Summary:
+  Avg Total Loss: 3.8215
+  Avg LM Loss: 3.4123
+  Avg Reasoning Loss: 0.6134
+  Avg Ortho Loss: 0.0098
+
+🔍 Running validation...
+  Val Total Loss: 3.7512
+  Val LM Loss: 3.3456
+  Val Reasoning Loss: 0.5923
+
+  ✓ Saved best model to checkpoints/best_model.pt
+  ✓ Saved checkpoint to checkpoints/checkpoint_epoch_2.pt
+
+...
+
+================================================================================
+Epoch 5/5
+================================================================================
+
+Training: 100%|████████████████| 125/125 [02:10<00:00,  1.04s/it]
+  total_loss=2.8134, lm_loss=2.4512, reasoning_loss=0.3214
+
+📊 Epoch 5 Summary:
+  Avg Total Loss: 2.8134
+  Avg LM Loss: 2.4512
+  Avg Reasoning Loss: 0.3214
+  Avg Ortho Loss: 0.0043
+
+🔍 Running validation...
+  Val Total Loss: 2.7823
+  Val LM Loss: 2.4234
+  Val Reasoning Loss: 0.3123
+
+  ✓ Saved best model to checkpoints/best_model.pt
+  ✓ Saved checkpoint to checkpoints/checkpoint_epoch_5.pt
+
+================================================================================
+🎉 TRAINING COMPLETE
+================================================================================
+
+Best validation loss: 2.7823
+Checkpoints saved to: checkpoints/
+
+✅ Training complete!
+Checkpoints saved to: checkpoints/
