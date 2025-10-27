@@ -1,18 +1,24 @@
-# 0. Install dependencies
+# Install dependencies
 pip install torch transformers datasets scipy matplotlib tqdm huggingface_hub
 
-# 1. Download the dataset
+# Download the dataset
 python data/download_esnli.py
 
-# 2. Fix transformers version conflict
+# Fix transformers version conflict
 pip uninstall transformers -y
 pip install transformers==4.36.0
 
-# 3. Train the model
+# Train the model
 python training/train_esnli.py
 
-# 4. Test the trained model
+# Test the trained model
 python experiments/demo_esnli.py
 
-# 5. Evaluate bit recovery accuracy
+# Evaluate bit recovery accuracy
 python experiments/evaluate_esnli.py
+
+### Expected Results
+- Training loss: 0.3361 → 0.1586 (-52.8%)
+- Bit recovery accuracy: 96.11%
+- Training time: ~11.5 minutes
+- Cost: ~$0.11 on RTX 4090
